@@ -344,7 +344,11 @@ export default {
       this.taskForm.taskId  = this.$route.query && this.$route.query.taskId;
       this.processed = this.$route.query && eval(this.$route.query.processed || false);
       // 流程任务重获取变量表单
-      this.getProcessDetails(this.taskForm.procInsId, this.taskForm.taskId);
+      if (this.taskForm.procInsId) {
+        this.getProcessDetails(this.taskForm.procInsId, this.taskForm.taskId);
+      } else {
+        this.$modal.msgError('流程实例ID为空，无法加载详情');
+      }
       this.loadIndex = this.taskForm.procInsId;
     },
     /** 查询部门下拉树结构 */
@@ -458,27 +462,37 @@ export default {
       }
     },
     async getProcessDetails(procInsId, taskId) {
-      const params = {procInsId: procInsId, taskId: taskId}
-      const res = await detailProcess(params);
-      const data = res.data;
-      this.xmlData = data.bpmnXml;
-      this.processFormList = data.processFormList;
-      this.taskFormOpen = data.existTaskForm;
-      if (this.taskFormOpen) {
-        this.taskFormData = data.taskFormData;
-        // 如果是自定义表单，动态加载组件
-        if (data.taskFormData && data.taskFormData.formType === 'custom') {
-          const componentName = data.taskFormData.componentPath;
-          const loader = customFormRegistry[componentName];
-          if (loader) {
-            const module = await loader();
-            this.customTaskFormComponent = module.default || module;
+      try {
+        const params = {procInsId: procInsId, taskId: taskId}
+        const res = await detailProcess(params);
+        const data = res.data;
+        this.xmlData = data.bpmnXml;
+        this.processFormList = data.processFormList;
+        this.taskFormOpen = data.existTaskForm;
+        if (this.taskFormOpen) {
+          this.taskFormData = data.taskFormData;
+          // 如果是自定义表单，动态加载组件（失败不影响页面渲染）
+          console.log('taskFormData:', data.taskFormData.formType)
+          if (data.taskFormData && data.taskFormData.formType === 'custom') {
+            try {
+              const componentName = data.taskFormData.componentPath;
+              const loader = customFormRegistry[componentName];
+              if (loader) {
+                const module = await loader();
+                this.customTaskFormComponent = module.default || module;
+              }
+            } catch (e) {
+              console.error('加载自定义表单组件失败:', e)
+            }
           }
         }
+        this.historyProcNodeList = data.historyProcNodeList;
+        this.finishedInfo = data.flowViewer;
+        this.formOpen = true
+      } catch (e) {
+        console.error('获取流程详情失败:', e)
+        this.$modal.msgError('获取流程详情失败')
       }
-      this.historyProcNodeList = data.historyProcNodeList;
-      this.finishedInfo = data.flowViewer;
-      this.formOpen = true
     },
     onSelectCopyUsers() {
       this.userMultipleSelection = this.copyUser;

@@ -750,17 +750,22 @@ public class WfProcessServiceImpl extends FlowServiceFactory implements IWfProce
             Map<String, Object> result = new HashMap<>();
             result.put("formType", formType);
 
+            // 合并流程级别变量和任务局部变量（任务局部优先）
+            Map<String, Object> mergedVariables = new HashMap<>();
+            mergedVariables.putAll(taskIns.getProcessVariables());
+            mergedVariables.putAll(taskIns.getTaskLocalVariables());
+
             if (FormConstants.FORM_TYPE_CUSTOM.equals(formType)) {
                 // 自定义表单
                 result.put("componentPath", deployFormVo.getContent());
-                result.put("formData", taskIns.getTaskLocalVariables());
+                result.put("formData", mergedVariables);
                 result.put("disabled", false);
             } else {
                 // 拖拽表单
                 FormConf currTaskFormData = JsonUtils.parseObject(deployFormVo.getContent(), FormConf.class);
                 if (null != currTaskFormData) {
                     currTaskFormData.setFormBtns(false);
-                    ProcessFormUtils.fillFormData(currTaskFormData, taskIns.getTaskLocalVariables());
+                    ProcessFormUtils.fillFormData(currTaskFormData, mergedVariables);
                     result.put("formConf", currTaskFormData);
                 } else {
                     return null;

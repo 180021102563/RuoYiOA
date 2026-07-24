@@ -26,7 +26,8 @@ const requireComponent = require.context(
 requireComponent.keys().forEach(fileName => {
   // 从 './LeaveForm.vue' 提取 'LeaveForm'
   const componentName = fileName.replace(/^\.\/(.*)\.\w+$/, '$1')
-  customFormRegistry[componentName] = () => requireComponent(fileName)
+  // 包装为 Promise，兼容 start.vue 的 await 和 detail.vue 的 .then()
+  customFormRegistry[componentName] = () => Promise.resolve(requireComponent(fileName))
 })
 
 /**
