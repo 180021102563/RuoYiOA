@@ -52,4 +52,5 @@ ruoyi-ui/npm-debug.log*
 ruoyi-ui/yarn-error.log*
 
 docs/custom-form-optimization-plan.md
+ruoyi-admin/src/main/resources/application-dev.yml
 
