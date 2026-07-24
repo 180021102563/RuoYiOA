@@ -8,7 +8,17 @@
             <span>填写表单</span>
           </div>
           <el-col :span="20" :offset="2">
-            <parser :form-conf="taskFormData" ref="taskFormParser"/>
+            <!-- 拖拽表单 -->
+            <parser v-if="taskFormData.formType !== 'custom'" :form-conf="taskFormData.formConf" ref="taskFormParser"/>
+            <!-- 自定义表单（审批时隐藏内置提交按钮，数据由审批操作获取） -->
+            <component v-else-if="taskFormData.formType === 'custom' && customTaskFormComponent"
+                       :is="customTaskFormComponent"
+                       :form-data="taskFormData.formData || {}"
+                       :disabled="taskFormData.disabled || false"
+                       :show-buttons="false"
+                       :proc-ins-id="taskForm.procInsId"
+                       :task-id="taskForm.taskId"
+                       ref="taskFormParser" />
           </el-col>
         </el-card>
         <el-card class="box-card" shadow="hover">
@@ -74,7 +84,13 @@
             </div>
             <!--流程处理表单模块-->
             <el-col :span="20" :offset="2">
-              <parser :form-conf="formInfo"/>
+              <!-- 拖拽表单 -->
+              <parser v-if="formInfo.formType !== 'custom'" :form-conf="formInfo"/>
+              <!-- 自定义表单（历史只读） -->
+              <component v-else-if="formInfo.formType === 'custom' && getCustomFormComponent(formInfo.componentPath)"
+                         :is="getCustomFormComponent(formInfo.componentPath)"
+                         :form-data="formInfo.formData || {}"
+                         :disabled="true" />
             </el-col>
           </el-card>
         </div>
@@ -206,6 +222,7 @@
 <script>
 import { detailProcess } from '@/api/workflow/process'
 import Parser from '@/utils/generator/parser'
+import customFormRegistry from '@/utils/customFormRegistry'
 import { complete, delegate, transfer, rejectTask, returnList, returnTask } from '@/api/workflow/task'
 import { selectUser, deptTreeSelect } from '@/api/system/user'
 import ProcessViewer from '@/components/ProcessViewer'
@@ -296,8 +313,10 @@ export default {
       variables: [], // 流程变量数据
       taskFormOpen: false,
       taskFormData: {}, // 流程变量数据
+      customTaskFormComponent: null, // 当前任务自定义表单组件
       processFormList: [], // 流程变量数据
       formOpen: false, // 是否加载流程变量数据
+      customFormCache: {}, // 已加载的自定义表单组件缓存
       returnTaskList: [],  // 回退列表数据
       processed: false,
       returnTitle: null,
@@ -410,6 +429,22 @@ export default {
         }
       }
     },
+    /** 获取自定义表单组件（带缓存） */
+    getCustomFormComponent(componentPath) {
+      if (!componentPath) return null;
+      if (this.customFormCache[componentPath]) {
+        return this.customFormCache[componentPath];
+      }
+      const loader = customFormRegistry[componentPath];
+      if (loader) {
+        // 同步返回 null，异步加载后触发更新
+        loader().then(module => {
+          const comp = module.default || module;
+          this.$set(this.customFormCache, componentPath, comp);
+        });
+      }
+      return null;
+    },
     /** 流程变量赋值 */
     handleCheckChange(val) {
       if (val instanceof Array) {
@@ -422,20 +457,28 @@ export default {
         }
       }
     },
-    getProcessDetails(procInsId, taskId) {
+    async getProcessDetails(procInsId, taskId) {
       const params = {procInsId: procInsId, taskId: taskId}
-      detailProcess(params).then(res => {
-        const data = res.data;
-        this.xmlData = data.bpmnXml;
-        this.processFormList = data.processFormList;
-        this.taskFormOpen = data.existTaskForm;
-        if (this.taskFormOpen) {
-          this.taskFormData = data.taskFormData;
+      const res = await detailProcess(params);
+      const data = res.data;
+      this.xmlData = data.bpmnXml;
+      this.processFormList = data.processFormList;
+      this.taskFormOpen = data.existTaskForm;
+      if (this.taskFormOpen) {
+        this.taskFormData = data.taskFormData;
+        // 如果是自定义表单，动态加载组件
+        if (data.taskFormData && data.taskFormData.formType === 'custom') {
+          const componentName = data.taskFormData.componentPath;
+          const loader = customFormRegistry[componentName];
+          if (loader) {
+            const module = await loader();
+            this.customTaskFormComponent = module.default || module;
+          }
         }
-        this.historyProcNodeList = data.historyProcNodeList;
-        this.finishedInfo = data.flowViewer;
-        this.formOpen = true
-      })
+      }
+      this.historyProcNodeList = data.historyProcNodeList;
+      this.finishedInfo = data.flowViewer;
+      this.formOpen = true
     },
     onSelectCopyUsers() {
       this.userMultipleSelection = this.copyUser;
@@ -459,9 +502,19 @@ export default {
       const isExistTaskForm = taskFormRef !== undefined;
       // 若无任务表单，则 taskFormPromise 为 true，即不需要校验
       const taskFormPromise = !isExistTaskForm ? true : new Promise((resolve, reject) => {
-        taskFormRef.$refs[taskFormRef.formConfCopy.formRef].validate(valid => {
-          valid ? resolve() : reject()
-        })
+        if (taskFormRef.validate) {
+          // 自定义表单：直接调用 validate 方法
+          taskFormRef.validate().then(valid => {
+            valid ? resolve() : reject()
+          });
+        } else if (taskFormRef.formConfCopy) {
+          // 拖拽表单：通过内部 ref 校验
+          taskFormRef.$refs[taskFormRef.formConfCopy.formRef].validate(valid => {
+            valid ? resolve() : reject()
+          });
+        } else {
+          resolve();
+        }
       });
       const approvalPromise = new Promise((resolve, reject) => {
         this.$refs['taskForm'].validate(valid => {
@@ -470,7 +523,13 @@ export default {
       });
       Promise.all([taskFormPromise, approvalPromise]).then(() => {
         if (isExistTaskForm) {
-          this.taskForm.variables = taskFormRef[taskFormRef.formConfCopy.formModel]
+          if (taskFormRef.getFormData) {
+            // 自定义表单
+            this.taskForm.variables = taskFormRef.getFormData();
+          } else if (taskFormRef.formConfCopy) {
+            // 拖拽表单
+            this.taskForm.variables = taskFormRef[taskFormRef.formConfCopy.formModel]
+          }
         }
         complete(this.taskForm).then(response => {
           this.$modal.msgSuccess(response.msg);

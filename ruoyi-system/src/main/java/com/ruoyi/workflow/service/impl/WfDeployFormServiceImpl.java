@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.ruoyi.common.exception.ServiceException;
 import com.ruoyi.common.utils.StringUtils;
+import com.ruoyi.flowable.common.constant.FormConstants;
 import com.ruoyi.flowable.utils.ModelUtils;
 import com.ruoyi.workflow.domain.WfDeployForm;
 import com.ruoyi.workflow.domain.WfForm;
@@ -117,18 +118,30 @@ public class WfDeployFormServiceImpl implements IWfDeployFormService {
         if (StringUtils.isEmpty(formKey)) {
             return null;
         }
-        Long formId = Convert.toLong(StringUtils.substringAfter(formKey, "key_"));
-        WfForm wfForm = formMapper.selectById(formId);
-        if (ObjectUtil.isNull(wfForm)) {
-            throw new ServiceException("表单信息查询错误");
-        }
+
         WfDeployForm deployForm = new WfDeployForm();
         deployForm.setDeployId(deployId);
         deployForm.setFormKey(formKey);
         deployForm.setNodeKey(node.getId());
-        deployForm.setFormName(wfForm.getFormName());
         deployForm.setNodeName(node.getName());
-        deployForm.setContent(wfForm.getContent());
+
+        if (formKey.startsWith(FormConstants.FORM_KEY_PREFIX_CUSTOM)) {
+            // 自定义表单：formKey = "custom_LeaveForm"
+            String componentPath = StringUtils.substringAfter(formKey, FormConstants.FORM_KEY_PREFIX_CUSTOM);
+            deployForm.setFormName(componentPath);
+            deployForm.setContent(componentPath);
+            deployForm.setFormType(FormConstants.FORM_TYPE_CUSTOM);
+        } else {
+            // 拖拽表单（兼容现有逻辑）：formKey = "key_123"
+            Long formId = Convert.toLong(StringUtils.substringAfter(formKey, FormConstants.FORM_KEY_PREFIX_BUILDER));
+            WfForm wfForm = formMapper.selectById(formId);
+            if (ObjectUtil.isNull(wfForm)) {
+                throw new ServiceException("表单信息查询错误");
+            }
+            deployForm.setFormName(wfForm.getFormName());
+            deployForm.setContent(wfForm.getContent());
+            deployForm.setFormType(ObjectUtil.defaultIfNull(wfForm.getFormType(), FormConstants.FORM_TYPE_BUILDER));
+        }
         return deployForm;
     }
 }

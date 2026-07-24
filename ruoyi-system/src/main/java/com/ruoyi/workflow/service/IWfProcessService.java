@@ -2,7 +2,6 @@ package com.ruoyi.workflow.service;
 
 import com.ruoyi.common.core.domain.PageQuery;
 import com.ruoyi.common.core.page.TableDataInfo;
-import com.ruoyi.flowable.core.FormConf;
 import com.ruoyi.flowable.core.domain.ProcessQuery;
 import com.ruoyi.workflow.domain.vo.WfDefinitionVo;
 import com.ruoyi.workflow.domain.vo.WfDetailVo;
@@ -77,8 +76,9 @@ public interface IWfProcessService {
      * 查询流程部署关联表单信息
      * @param definitionId 流程定义ID
      * @param deployId 部署ID
+     * @return Map 包含 formType + formConf/componentPath + formData 等信息
      */
-    FormConf selectFormContent(String definitionId, String deployId, String procInsId);
+    Map<String, Object> selectFormContent(String definitionId, String deployId, String procInsId);
 
     /**
      * 启动流程实例

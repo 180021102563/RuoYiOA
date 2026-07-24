@@ -44,3 +44,12 @@ nbdist/
 !*/build/*.java
 !*/build/*.html
 !*/build/*.xml
+
+# Vue前端依赖、打包文件
+ruoyi-ui/node_modules/
+ruoyi-ui/dist/
+ruoyi-ui/npm-debug.log*
+ruoyi-ui/yarn-error.log*
+
+docs/custom-form-optimization-plan.md
+

@@ -811,6 +811,7 @@ drop table if exists `wf_form`;
 create table `wf_form` (
    form_id      bigint(20)   not null auto_increment comment '表单主键',
    form_name    varchar(64)           default ''     comment '表单名称',
+   form_type    varchar(20)           default 'builder' comment '表单类型（builder拖拽表单 custom自定义表单）',
    content      longtext              default null   comment '表单内容',
    create_by    varchar(64)           default ''     comment '创建者',
    create_time  datetime              default null   comment '创建时间',
@@ -831,6 +832,7 @@ create table `wf_deploy_form` (
     form_key   varchar(64)     not null     comment '表单Key',
     node_key   varchar(64)     not null     comment '节点Key',
     form_name  varchar(64)     default ''   comment '表单名称',
+    form_type  varchar(20)     default 'builder' comment '表单类型（builder拖拽表单 custom自定义表单）',
     node_name  varchar(255)    default ''   comment '节点名称',
     content    longtext        default null comment '表单内容',
     primary key (deploy_id, form_key, node_key)
@@ -876,3 +878,9 @@ create table `wf_copy` (
    del_flag        char(1)                 default '0'      comment '删除标志（0代表存在 2代表删除）',
    primary key (`copy_id`)
 ) engine=innodb comment='流程抄送表';
+
+-- ----------------------------
+-- 升级语句：为 wf_form 和 wf_deploy_form 增加表单类型字段（已建表升级使用）
+-- ----------------------------
+ALTER TABLE `wf_form` ADD COLUMN `form_type` varchar(20) default 'builder' comment '表单类型（builder拖拽表单 custom自定义表单）';
+ALTER TABLE `wf_deploy_form` ADD COLUMN `form_type` varchar(20) default 'builder' comment '表单类型（builder拖拽表单 custom自定义表单）';

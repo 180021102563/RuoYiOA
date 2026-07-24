@@ -104,12 +104,28 @@
     <!-- 添加或修改流程表单对话框 -->
     <el-dialog :title="title" :visible.sync="open" width="500px" append-to-body>
       <el-form ref="form" :model="form" :rules="rules" label-width="80px">
+        <el-form-item label="表单类型" prop="formType">
+          <el-radio-group v-model="form.formType" :disabled="form.formId != null">
+            <el-radio label="builder">拖拽表单</el-radio>
+            <el-radio label="custom">自定义表单</el-radio>
+          </el-radio-group>
+        </el-form-item>
         <el-form-item label="表单名称" prop="formName">
           <el-input v-model="form.formName" placeholder="请输入表单名称" />
         </el-form-item>
-        <el-form-item label="表单内容">
-          <editor v-model="form.content" :min-height="192"/>
-        </el-form-item>
+        <!-- 拖拽表单提示 -->
+        <template v-if="form.formType === 'builder'">
+          <el-alert title="拖拽表单将跳转到可视化构建器进行设计，请先填写表单名称后保存" type="info" :closable="false" show-icon style="margin-bottom: 15px;" />
+        </template>
+        <!-- 自定义表单：选择组件 -->
+        <template v-if="form.formType === 'custom'">
+          <el-form-item label="表单组件" prop="content">
+            <el-select v-model="form.content" placeholder="请选择自定义表单组件" style="width: 100%" clearable>
+              <el-option v-for="item in customFormOptions" :key="item.name"
+                         :label="item.name" :value="item.name" />
+            </el-select>
+          </el-form-item>
+        </template>
         <el-form-item label="备注" prop="remark">
           <el-input v-model="form.remark" placeholder="请输入备注" />
         </el-form-item>
@@ -133,6 +149,7 @@
 import { listForm, getForm, delForm, addForm, updateForm } from "@/api/workflow/form";
 import Editor from '@/components/Editor';
 import Parser from '@/utils/generator/parser'
+import { getCustomFormOptions } from '@/utils/customFormRegistry'
 export default {
   name: "Form",
   components: {
@@ -162,6 +179,8 @@ export default {
       formTitle: "",
       // 是否显示弹出层
       open: false,
+      // 自定义表单组件列表
+      customFormOptions: [],
       // 查询参数
       queryParams: {
         pageNum: 1,
@@ -202,6 +221,7 @@ export default {
       this.form = {
         formId: null,
         formName: null,
+        formType: 'builder',
         content: null,
         createTime: null,
         updateTime: null,
@@ -231,25 +251,29 @@ export default {
     handleDetail(row){
       this.formConfOpen = true;
       this.formTitle = "流程表单配置详细";
-      this.formConf = JSON.parse(row.content)
+      if (row.formType === 'custom') {
+        // 自定义表单无法预览
+        this.formConf = { title: row.formName, fields: [] }
+      } else {
+        this.formConf = JSON.parse(row.content)
+      }
     },
     /** 新增按钮操作 */
     handleAdd() {
-      // this.reset();
-      // this.open = true;
-      // this.title = "添加流程表单";
-      this.$router.push({ path: '/tool/build/index', query: {formId: null }})
+      this.reset();
+      this.customFormOptions = getCustomFormOptions();
+      this.open = true;
+      this.title = "添加流程表单";
     },
     /** 修改按钮操作 */
     handleUpdate(row) {
-      // this.reset();
-      // const formId = row.formId || this.ids
-      // getForm(formId).then(response => {
-      //   this.form = response.data;
-      //   this.open = true;
-      //   this.title = "修改流程表单";
-      // });
-      this.$router.push({ path: '/tool/build/index', query: {formId: row.formId }})
+      const formId = row.formId || this.ids
+      getForm(formId).then(response => {
+        this.form = response.data;
+        this.customFormOptions = getCustomFormOptions();
+        this.open = true;
+        this.title = "修改流程表单";
+      });
     },
     /** 提交按钮 */
     submitForm() {
@@ -262,11 +286,24 @@ export default {
               this.getList();
             });
           } else {
-            addForm(this.form).then(response => {
-              this.$modal.msgSuccess("新增成功");
-              this.open = false;
-              this.getList();
-            });
+            if (this.form.formType === 'builder') {
+              // 拖拽表单：先保存基本信息，再跳转到构建器
+              addForm(Object.assign({}, this.form, {
+                content: '{}'
+              })).then(response => {
+                this.open = false;
+                // 跳转到构建器继续设计
+                this.$router.push({ path: '/tool/build/index', query: {formId: null }})
+                this.getList();
+              });
+            } else {
+              // 自定义表单：直接保存
+              addForm(this.form).then(response => {
+                this.$modal.msgSuccess("新增成功");
+                this.open = false;
+                this.getList();
+              });
+            }
           }
         }
       });

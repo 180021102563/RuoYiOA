@@ -21,6 +21,7 @@ import com.ruoyi.common.utils.JsonUtils;
 import com.ruoyi.common.utils.StringUtils;
 import com.ruoyi.flowable.common.constant.ProcessConstants;
 import com.ruoyi.flowable.common.constant.TaskConstants;
+import com.ruoyi.flowable.common.constant.FormConstants;
 import com.ruoyi.flowable.common.enums.ProcessStatus;
 import com.ruoyi.flowable.core.FormConf;
 import com.ruoyi.flowable.core.domain.ProcessQuery;
@@ -545,8 +546,9 @@ public class WfProcessServiceImpl extends FlowServiceFactory implements IWfProce
         return hisTaskList;
     }
 
+
     @Override
-    public FormConf selectFormContent(String definitionId, String deployId, String procInsId) {
+    public Map<String, Object> selectFormContent(String definitionId, String deployId, String procInsId) {
         BpmnModel bpmnModel = repositoryService.getBpmnModel(definitionId);
         if (ObjectUtil.isNull(bpmnModel)) {
             throw new RuntimeException("获取流程设计失败！");
@@ -556,20 +558,41 @@ public class WfProcessServiceImpl extends FlowServiceFactory implements IWfProce
             .eq(WfDeployForm::getDeployId, deployId)
             .eq(WfDeployForm::getFormKey, startEvent.getFormKey())
             .eq(WfDeployForm::getNodeKey, startEvent.getId()));
-        FormConf formConf = JsonUtils.parseObject(deployForm.getContent(), FormConf.class);
-        if (ObjectUtil.isNull(formConf)) {
+
+        if (ObjectUtil.isNull(deployForm)) {
             throw new RuntimeException("获取流程表单失败！");
         }
-        if (ObjectUtil.isNotEmpty(procInsId)) {
-            // 获取流程实例
-            HistoricProcessInstance historicProcIns = historyService.createHistoricProcessInstanceQuery()
-                .processInstanceId(procInsId)
-                .includeProcessVariables()
-                .singleResult();
-            // 填充表单信息
-            ProcessFormUtils.fillFormData(formConf, historicProcIns.getProcessVariables());
+
+        String formType = ObjectUtil.defaultIfNull(deployForm.getFormType(), FormConstants.FORM_TYPE_BUILDER);
+        Map<String, Object> result = new HashMap<>();
+        result.put("formType", formType);
+
+        if (FormConstants.FORM_TYPE_CUSTOM.equals(formType)) {
+            // 自定义表单：返回组件路径和流程变量
+            result.put("componentPath", deployForm.getContent());
+            if (ObjectUtil.isNotEmpty(procInsId)) {
+                HistoricProcessInstance historicProcIns = historyService.createHistoricProcessInstanceQuery()
+                    .processInstanceId(procInsId)
+                    .includeProcessVariables()
+                    .singleResult();
+                result.put("formData", historicProcIns.getProcessVariables());
+            }
+        } else {
+            // 拖拽表单：返回 FormConf
+            FormConf formConf = JsonUtils.parseObject(deployForm.getContent(), FormConf.class);
+            if (ObjectUtil.isNull(formConf)) {
+                throw new RuntimeException("获取流程表单失败！");
+            }
+            if (ObjectUtil.isNotEmpty(procInsId)) {
+                HistoricProcessInstance historicProcIns = historyService.createHistoricProcessInstanceQuery()
+                    .processInstanceId(procInsId)
+                    .includeProcessVariables()
+                    .singleResult();
+                ProcessFormUtils.fillFormData(formConf, historicProcIns.getProcessVariables());
+            }
+            result.put("formConf", formConf);
         }
-        return formConf;
+        return result;
     }
 
     /**
@@ -717,18 +740,33 @@ public class WfProcessServiceImpl extends FlowServiceFactory implements IWfProce
     /**
      * 获取当前任务流程表单信息
      */
-    private FormConf currTaskFormData(String deployId, HistoricTaskInstance taskIns) {
+    private Map<String, Object> currTaskFormData(String deployId, HistoricTaskInstance taskIns) {
         WfDeployFormVo deployFormVo = deployFormMapper.selectVoOne(new LambdaQueryWrapper<WfDeployForm>()
             .eq(WfDeployForm::getDeployId, deployId)
             .eq(WfDeployForm::getFormKey, taskIns.getFormKey())
             .eq(WfDeployForm::getNodeKey, taskIns.getTaskDefinitionKey()));
         if (ObjectUtil.isNotEmpty(deployFormVo)) {
-            FormConf currTaskFormData = JsonUtils.parseObject(deployFormVo.getContent(), FormConf.class);
-            if (null != currTaskFormData) {
-                currTaskFormData.setFormBtns(false);
-                ProcessFormUtils.fillFormData(currTaskFormData, taskIns.getTaskLocalVariables());
-                return currTaskFormData;
+            String formType = ObjectUtil.defaultIfNull(deployFormVo.getFormType(), FormConstants.FORM_TYPE_BUILDER);
+            Map<String, Object> result = new HashMap<>();
+            result.put("formType", formType);
+
+            if (FormConstants.FORM_TYPE_CUSTOM.equals(formType)) {
+                // 自定义表单
+                result.put("componentPath", deployFormVo.getContent());
+                result.put("formData", taskIns.getTaskLocalVariables());
+                result.put("disabled", false);
+            } else {
+                // 拖拽表单
+                FormConf currTaskFormData = JsonUtils.parseObject(deployFormVo.getContent(), FormConf.class);
+                if (null != currTaskFormData) {
+                    currTaskFormData.setFormBtns(false);
+                    ProcessFormUtils.fillFormData(currTaskFormData, taskIns.getTaskLocalVariables());
+                    result.put("formConf", currTaskFormData);
+                } else {
+                    return null;
+                }
             }
+            return result;
         }
         return null;
     }
@@ -736,8 +774,8 @@ public class WfProcessServiceImpl extends FlowServiceFactory implements IWfProce
     /**
      * 获取历史流程表单信息
      */
-    private List<FormConf> processFormList(BpmnModel bpmnModel, HistoricProcessInstance historicProcIns) {
-        List<FormConf> procFormList = new ArrayList<>();
+    private List<Object> processFormList(BpmnModel bpmnModel, HistoricProcessInstance historicProcIns) {
+        List<Object> procFormList = new ArrayList<>();
 
         List<HistoricActivityInstance> activityInstanceList = historyService.createHistoricActivityInstanceQuery()
             .processInstanceId(historicProcIns.getId()).finished()
@@ -780,16 +818,30 @@ public class WfProcessServiceImpl extends FlowServiceFactory implements IWfProce
             WfDeployFormVo formInfo = formInfoList.stream().findFirst().orElse(null);
 
             if (ObjectUtil.isNotNull(formInfo)) {
+                String formType = ObjectUtil.defaultIfNull(formInfo.getFormType(), FormConstants.FORM_TYPE_BUILDER);
                 // 旧数据 formInfo.getFormName() 为 null
                 String formName = Optional.ofNullable(formInfo.getFormName()).orElse(StringUtils.EMPTY);
                 String title = localScope ? formName.concat("(" + flowElement.getName() + ")") : formName;
-                FormConf formConf = JsonUtils.parseObject(formInfo.getContent(), FormConf.class);
-                if (null != formConf) {
-                    formConf.setTitle(title);
-                    formConf.setDisabled(true);
-                    formConf.setFormBtns(false);
-                    ProcessFormUtils.fillFormData(formConf, variables);
-                    procFormList.add(formConf);
+
+                if (FormConstants.FORM_TYPE_CUSTOM.equals(formType)) {
+                    // 自定义表单：返回组件路径和变量数据
+                    Map<String, Object> customFormInfo = new HashMap<>();
+                    customFormInfo.put("formType", formType);
+                    customFormInfo.put("title", title);
+                    customFormInfo.put("componentPath", formInfo.getContent());
+                    customFormInfo.put("formData", variables);
+                    customFormInfo.put("disabled", true);
+                    procFormList.add(customFormInfo);
+                } else {
+                    // 拖拽表单
+                    FormConf formConf = JsonUtils.parseObject(formInfo.getContent(), FormConf.class);
+                    if (null != formConf) {
+                        formConf.setTitle(title);
+                        formConf.setDisabled(true);
+                        formConf.setFormBtns(false);
+                        ProcessFormUtils.fillFormData(formConf, variables);
+                        procFormList.add(formConf);
+                    }
                 }
             }
         }

@@ -1,9 +1,23 @@
 <template>
   <div class="panel-tab__content">
     <el-form size="mini" label-width="90px" @submit.native.prevent>
-      <el-form-item label="表单" prop="formKey">
+      <!-- 表单类型选择 -->
+      <el-form-item label="表单类型">
+        <el-radio-group v-model="formType" @change="onFormTypeChange" size="mini">
+          <el-radio label="builder">拖拽表单</el-radio>
+          <el-radio label="custom">自定义表单</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <!-- 拖拽表单：下拉选择 -->
+      <el-form-item v-if="formType === 'builder'" label="表单" prop="formKey">
         <el-select v-model="formKey" placeholder="请选择表单" @change="updateElementFormKey" clearable>
           <el-option v-for="item in formOptions" :key="item.formId" :label="item.formName" :value="`key_${item.formId}`" />
+        </el-select>
+      </el-form-item>
+      <!-- 自定义表单：选择组件 -->
+      <el-form-item v-if="formType === 'custom'" label="表单组件" prop="formKey">
+        <el-select v-model="formKey" placeholder="请选择自定义表单" @change="updateElementFormKey" clearable>
+          <el-option v-for="item in customFormOptions" :key="item.name" :label="item.name" :value="`custom_${item.name}`" />
         </el-select>
       </el-form-item>
       <el-form-item prop="localScope">
@@ -163,6 +177,7 @@
 
 <script>
 import { listForm } from "@/api/workflow/form";
+import { getCustomFormOptions } from '@/utils/customFormRegistry'
 
 export default {
   name: "ElementForm",
@@ -177,7 +192,9 @@ export default {
   data() {
     return {
       formOptions: [],
+      customFormOptions: [],
       formKey: "",
+      formType: "builder",
       localScope: false,
       businessKey: "",
       optionModelTitle: "",
@@ -211,17 +228,34 @@ export default {
     }
   },
   created() {
-    /** 查询流程分类列表 */
+    /** 查询流程表单列表 */
     this.getFormList();
+    /** 获取自定义表单列表 */
+    this.getCustomFormList();
   },
   methods: {
-    /** 查询表单列表 */
+    /** 查询拖拽表单列表 */
     getFormList() {
       listForm().then(response => this.formOptions = response.rows)
     },
+    /** 获取自定义表单列表 */
+    getCustomFormList() {
+      this.customFormOptions = getCustomFormOptions()
+    },
     resetFormList() {
       this.bpmnELement = window.bpmnInstances.bpmnElement;
-      this.formKey = this.bpmnELement.businessObject.formKey;
+      const rawFormKey = this.bpmnELement.businessObject.formKey || '';
+      // 解析当前 formKey，恢复表单类型
+      if (rawFormKey.startsWith('custom_')) {
+        this.formType = 'custom';
+        this.formKey = rawFormKey;
+      } else if (rawFormKey.startsWith('key_')) {
+        this.formType = 'builder';
+        this.formKey = rawFormKey;
+      } else {
+        this.formType = 'builder';
+        this.formKey = '';
+      }
       this.localScope = this.bpmnELement.businessObject.localScope;
       // 获取元素扩展属性 或者 创建扩展属性
       this.elExtensionElements =
@@ -244,6 +278,11 @@ export default {
     },
     updateElementFormKey() {
       window.bpmnInstances.modeling.updateProperties(this.bpmnELement, { formKey: this.formKey });
+    },
+    onFormTypeChange() {
+      // 切换表单类型时清空已选值
+      this.formKey = '';
+      this.updateElementFormKey();
     },
     updateElementFormScope() {
       window.bpmnInstances.modeling.updateProperties(this.bpmnELement, { localScope: this.localScope });

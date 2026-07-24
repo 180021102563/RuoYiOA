@@ -34,6 +34,11 @@ public class WfDeployFormVo {
     private String formName;
 
     /**
+     * 表单类型（builder=拖拽表单, custom=自定义表单）
+     */
+    private String formType;
+
+    /**
      * 节点名称
      */
     private String nodeName;

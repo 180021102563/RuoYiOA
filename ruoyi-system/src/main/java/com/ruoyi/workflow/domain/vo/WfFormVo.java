@@ -29,6 +29,12 @@ public class WfFormVo {
     private String formName;
 
     /**
+     * 表单类型（builder=拖拽表单, custom=自定义表单）
+     */
+    @ExcelProperty(value = "表单类型")
+    private String formType;
+
+    /**
      * 表单内容
      */
     @ExcelProperty(value = "表单内容")

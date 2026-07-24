@@ -1,10 +1,10 @@
 package com.ruoyi.workflow.domain.vo;
 
 import cn.hutool.core.util.ObjectUtil;
-import com.ruoyi.flowable.core.FormConf;
 import lombok.Data;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 流程详情视图对象
@@ -16,9 +16,9 @@ import java.util.List;
 public class WfDetailVo {
 
     /**
-     * 任务表单信息
+     * 任务表单信息（builder 类型为 FormConf 对象，custom 类型为 Map）
      */
-    private FormConf taskFormData;
+    private Object taskFormData;
 
     /**
      * 历史流程节点信息
@@ -28,7 +28,7 @@ public class WfDetailVo {
     /**
      * 流程表单列表
      */
-    private List<FormConf> processFormList;
+    private List<Object> processFormList;
 
     /**
      * 流程XML

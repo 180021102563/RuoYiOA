@@ -6,7 +6,19 @@
       </div>
       <el-col :span="18" :offset="3">
         <div class="form-conf" v-if="formOpen">
-          <parser :key="new Date().getTime()" :form-conf="formData" @submit="submit" ref="parser" @getData="getData"/>
+          <!-- 拖拽表单：使用原有 Parser 组件 -->
+          <parser v-if="formType === 'builder'"
+                  :key="new Date().getTime()"
+                  :form-conf="formConf"
+                  @submit="submitBuilderForm"
+                  @getData="getData" />
+
+          <!-- 自定义表单：使用动态组件，显示内置提交按钮 -->
+          <component v-else-if="formType === 'custom' && customFormComponent"
+                     :is="customFormComponent"
+                     :form-data="formData"
+                     :show-buttons="true"
+                     @submit="submitCustomForm" />
         </div>
       </el-col>
     </el-card>
@@ -16,6 +28,7 @@
 <script>
 import { getProcessForm, startProcess } from '@/api/workflow/process'
 import Parser from '@/utils/generator/parser'
+import customFormRegistry from '@/utils/customFormRegistry'
 
 export default {
   name: 'WorkStart',
@@ -28,29 +41,48 @@ export default {
       deployId: null,
       procInsId: null,
       formOpen: false,
-      formData: {},
+      formType: '',           // 'builder' | 'custom'
+      formConf: {},           // 拖拽表单配置
+      formData: {},           // 自定义表单初始数据
+      customFormComponent: null, // 动态加载的自定义表单组件
     }
   },
   created() {
     this.initData();
   },
   methods: {
-    initData() {
+    async initData() {
       this.deployId = this.$route.params && this.$route.params.deployId;
       this.definitionId = this.$route.query && this.$route.query.definitionId;
       this.procInsId = this.$route.query && this.$route.query.procInsId;
-      getProcessForm({
+
+      const res = await getProcessForm({
         definitionId: this.definitionId,
         deployId: this.deployId,
         procInsId: this.procInsId
-      }).then(res => {
-        if (res.data) {
-          this.formData = res.data;
-          this.formOpen = true
+      });
+
+      if (res.data) {
+        this.formType = res.data.formType || 'builder';
+        this.formOpen = true;
+
+        if (this.formType === 'custom') {
+          // 动态加载自定义表单组件
+          const componentName = res.data.componentPath; // 如 'LeaveForm'
+          const loader = customFormRegistry[componentName];
+          if (loader) {
+            const module = await loader();
+            this.customFormComponent = module.default || module;
+          } else {
+            this.$modal.msgError('自定义表单组件 "' + componentName + '" 未注册');
+          }
+          this.formData = res.data.formData || {};
+        } else {
+          this.formConf = res.data.formConf || {};
         }
-      })
+      }
     },
-    /** 接收子组件传的值 */
+    /** 接收子组件传的值（拖拽表单） */
     getData(data) {
       if (data) {
         const variables = [];
@@ -72,14 +104,21 @@ export default {
         this.variables = variables;
       }
     },
-    submit(data) {
+    /** 拖拽表单提交 */
+    submitBuilderForm(data) {
       if (data && this.definitionId) {
-        // 启动流程并将表单数据加入流程变量
         startProcess(this.definitionId, JSON.stringify(data.valData)).then(res => {
           this.$modal.msgSuccess(res.msg);
-          this.$tab.closeOpenPage({
-            path: '/work/own'
-          })
+          this.$tab.closeOpenPage({ path: '/work/own' })
+        })
+      }
+    },
+    /** 自定义表单提交 */
+    submitCustomForm({ formData }) {
+      if (this.definitionId) {
+        startProcess(this.definitionId, JSON.stringify(formData)).then(res => {
+          this.$modal.msgSuccess(res.msg);
+          this.$tab.closeOpenPage({ path: '/work/own' })
         })
       }
     }

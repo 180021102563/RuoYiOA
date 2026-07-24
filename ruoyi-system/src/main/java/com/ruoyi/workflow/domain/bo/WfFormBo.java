@@ -33,6 +33,12 @@ public class WfFormBo extends BaseEntity {
     private String formName;
 
     /**
+     * 表单类型（builder=拖拽表单, custom=自定义表单）
+     */
+    @NotBlank(message = "表单类型不能为空", groups = { AddGroup.class, EditGroup.class })
+    private String formType;
+
+    /**
      * 表单内容
      */
     @NotBlank(message = "表单内容不能为空", groups = { AddGroup.class, EditGroup.class })

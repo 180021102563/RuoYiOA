@@ -246,7 +246,7 @@ public class WfModelServiceImpl extends FlowServiceFactory implements IWfModelSe
         }
         // 获取开始节点配置的表单Key
         if (StrUtil.isBlank(startEvent.getFormKey())) {
-            throw new RuntimeException("请配置流程表单");
+            throw new RuntimeException("请在流程设计器中点击【开始节点（圆圈）】，然后在右侧属性面板中为该节点配置表单");
         }
         Model newModel;
         if (Boolean.TRUE.equals(modelBo.getNewVersion())) {

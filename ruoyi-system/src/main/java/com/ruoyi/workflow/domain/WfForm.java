@@ -30,6 +30,11 @@ public class WfForm extends BaseEntity {
     private String formName;
 
     /**
+     * 表单类型（builder=拖拽表单, custom=自定义表单）
+     */
+    private String formType;
+
+    /**
      * 表单内容
      */
     private String content;
